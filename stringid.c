@@ -181,6 +181,7 @@ stringid_str(struct stringpool *S, stringid_t id, char *buffer, int *sz) {
 	struct stringid_page *pp = S->p[page].p;
 	assert(pp != NULL);
 	*sz = string_len(pp, sec);
+	assert(*sz >= 0);
 	if (string_continuous(pp, sec))
 		return (const char *)&pp->data[sec][2];
 	if (bufsz > *sz) {
@@ -335,7 +336,7 @@ stringid_clone(struct stringpool *S, stringid_t id) {
 }
 
 static void
-dump_list(char mark[0x10000], struct stringid_page *p, int sec, int freelist) {
+dump_list(char mark[0x10000], struct stringid_page *p, int sec) {
 	printf("[%d] ", sec);
 	int count = get_number(p, sec);
 	mark[sec] = 1;
@@ -346,16 +347,12 @@ dump_list(char mark[0x10000], struct stringid_page *p, int sec, int freelist) {
 			return;
 		}
 		mark[sec] = 1;
-		if (!freelist) 
-			printf("%d ", sec);
+		printf("%d ", sec);
 	}
 	switch (padding_tag(p, sec)) {
 	case 0:
 	case EOS_PADDING:
 		printf("(%d)", count);
-		break;
-	case EOS_FREE:
-		printf("FREE");
 		break;
 	default:
 		printf("INVALID");
@@ -365,22 +362,51 @@ dump_list(char mark[0x10000], struct stringid_page *p, int sec, int freelist) {
 }
 
 static void
+mark_freelist(char mark[0x10000], struct stringid_page *p, int sec) {
+	for (;;) {
+		if (mark[sec]) {
+			printf("INVALID\n");
+			return;
+		}
+		mark[sec] = 1;
+		int next = p->header[sec];
+		if (sec == next)
+			break;
+		sec = next;
+	}
+}
+
+static int
+is_head(struct stringid_page *p, int sec) {
+	int i;
+	if (p->header[sec] == sec)
+		return 1;
+	for (i=0;i<0x10000;i++) {
+		if (i != sec && p->header[i] == sec)
+			return 0;
+	}
+	return 1;
+}
+
+static void
 dump_page(struct stringpool *S, int page) {
 	struct stringid_index *idx = &S->p[page];
 	printf("freeslot = %d, freelist = %d\n", idx->freeslot, idx->freelist);
 	char mark[0x10000];
 	memset(mark, 0, sizeof(mark));
+	if (idx->freeslot > 0) {
+		mark_freelist(mark, idx->p, idx->freelist);
+		printf("[%d] FREE\n", idx->freelist);
+	}
 	int i;
 	for (i=0;i<0x10000;i++) {
-		if (!mark[i]) {
-			dump_list(mark, idx->p, i, idx->freelist == i);
-			if (i != idx->freelist) {
-				char tmp[128];
-				int sz = sizeof(tmp);
-				stringid_t id = { page << 16 | i };
-				const char * s = stringid_str(S,  id, tmp, &sz);
-				printf("(%d) %s\n", sz, s);
-			}
+		if (!mark[i] && is_head(idx->p, i)) {
+			dump_list(mark, idx->p, i);
+			char tmp[128];
+			int sz = sizeof(tmp);
+			stringid_t id = { page << 16 | i };
+			const char * s = stringid_str(S,  id, tmp, &sz);
+			printf("(%d) %s\n", sz, s);
 		}
 	}
 }
