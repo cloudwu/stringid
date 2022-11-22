@@ -335,17 +335,11 @@ stringid_clone(struct stringpool *S, stringid_t id) {
 }
 
 static void
-dump_list(char mark[0x10000], struct stringid_page *p, int sec, int freelist) {
+dump_list(struct stringid_page *p, int sec, int freelist) {
 	printf("[%d] ", sec);
 	int count = get_number(p, sec);
-	mark[sec] = 1;
 	while (sec != p->header[sec]) {
 		sec = p->header[sec];
-		if (mark[sec]) {
-			printf("*%d\n", sec);
-			return;
-		}
-		mark[sec] = 1;
 		if (!freelist) 
 			printf("%d ", sec);
 	}
@@ -372,8 +366,13 @@ dump_page(struct stringpool *S, int page) {
 	memset(mark, 0, sizeof(mark));
 	int i;
 	for (i=0;i<0x10000;i++) {
+		if (idx->p->header[i]!=i)
+			mark[idx->p->header[i]] = 1;
+	}
+	
+	for (i=0;i<0x10000;i++) {
 		if (!mark[i]) {
-			dump_list(mark, idx->p, i, idx->freelist == i);
+			dump_list(idx->p, i, idx->freelist == i);
 			if (i != idx->freelist) {
 				char tmp[128];
 				int sz = sizeof(tmp);
