@@ -379,8 +379,6 @@ mark_freelist(char mark[0x10000], struct stringid_page *p, int sec) {
 static int
 is_head(struct stringid_page *p, int sec) {
 	int i;
-	if (p->header[sec] == sec)
-		return 1;
 	for (i=0;i<0x10000;i++) {
 		if (i != sec && p->header[i] == sec)
 			return 0;
